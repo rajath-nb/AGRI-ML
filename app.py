@@ -35,7 +35,7 @@ if not DATABASE_URL:
     st.error("DATABASE_URL not found! Set it in Streamlit Cloud Secrets.")
     st.stop()
 
-# Format PostgreSQL URI and ensure pooler port 6543 & sslmode=require
+# Format PostgreSQL URI and ensure sslmode=require
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
