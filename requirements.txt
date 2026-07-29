@@ -1,0 +1,9 @@
+streamlit
+pandas
+openpyxl
+scikit-learn
+google-generativeai
+python-dotenv
+psycopg2-binary
+sqlalchemy
+joblib
