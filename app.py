@@ -13,7 +13,6 @@ st.set_page_config(page_title="AGRIshield Scanner", page_icon="🌱", layout="ce
 
 load_dotenv('api.env')
 
-# Safe helper to prevent StreamlitSecretNotFoundError
 def get_secret(key):
     val = os.getenv(key)
     if val:
@@ -29,14 +28,14 @@ API_KEY = get_secret("GEMINI_API_KEY")
 DATABASE_URL = get_secret("DATABASE_URL")
 
 if not API_KEY:
-    st.error("GEMINI_API_KEY not found! Please set it in Streamlit Cloud Secrets.")
+    st.error("GEMINI_API_KEY not found! Set it in Streamlit Cloud Secrets.")
     st.stop()
 
 if not DATABASE_URL:
-    st.error("DATABASE_URL not found! Please set it in Streamlit Cloud Secrets.")
+    st.error("DATABASE_URL not found! Set it in Streamlit Cloud Secrets.")
     st.stop()
 
-# Format URI scheme and append SSL mode
+# Format PostgreSQL URI and ensure pooler port 6543 & sslmode=require
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
@@ -46,7 +45,7 @@ if "sslmode=" not in DATABASE_URL:
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"sslmode": "require", "connect_timeout": 10},
+    connect_args={"sslmode": "require", "connect_timeout": 15},
     pool_pre_ping=True,
     pool_recycle=300
 )
@@ -70,7 +69,7 @@ def init_db():
             '''))
             conn.commit()
     except Exception as e:
-        st.warning("Connecting to Cloud Database...")
+        st.warning(f"Database connection notice: {e}")
 
 init_db()
 
@@ -120,8 +119,18 @@ try:
     plant_options = joblib.load('plant_options.pkl')
     disease_options = joblib.load('disease_options.pkl')
 except FileNotFoundError:
-    st.error("Model files missing! Ensure .pkl files are pushed to GitHub.")
+    st.error("Model files missing! Ensure .pkl files are in your repository.")
     st.stop()
+
+# --- SESSION STATE INITIALIZATION FOR PERSISTENCE ---
+if 'report_text' not in st.session_state:
+    st.session_state.report_text = None
+if 'last_prediction' not in st.session_state:
+    st.session_state.last_prediction = "No prediction yet"
+if 'active_plant' not in st.session_state:
+    st.session_state.active_plant = ""
+if 'active_disease' not in st.session_state:
+    st.session_state.active_disease = ""
 
 # --- UI DESIGN ---
 st.title("🌿 AGRIshield Diagnostic Report")
@@ -139,11 +148,11 @@ elif input_method == "Type Manually":
     plant_input = st.text_input("Enter Plant Name:")
     disease_input = st.text_input("Enter Detected Disease:")
 
-if 'last_prediction' not in st.session_state:
-    st.session_state.last_prediction = "No prediction yet"
-
+# --- REPORT GENERATION LOGIC ---
 if st.button("Generate Condensed Herbal Report", use_container_width=True):
     if plant_input and disease_input:
+        st.session_state.active_plant = plant_input
+        st.session_state.active_disease = disease_input
         try:
             plant_num = le_plant.transform([plant_input])[0]
             disease_num = le_disease.transform([disease_input])[0]
@@ -169,75 +178,81 @@ if st.button("Generate Condensed Herbal Report", use_container_width=True):
             
             with st.spinner("🔍 Compiling Verified Herbal Report..."):
                 response = llm_model.generate_content(prompt)
+                st.session_state.report_text = response.text
                 
-            st.markdown("---")
-            st.markdown(response.text)
-            
         except ValueError:
             st.warning("Custom entry detected. Running Deep Analysis...")
             st.session_state.last_prediction = "Custom Cloud Analysis"
             fallback_prompt = f"Provide a condensed, 100% chemical-free herbal treatment report for '{plant_input}' suffering from '{disease_input}' using short bullet points."
             response = llm_model.generate_content(fallback_prompt)
-            st.markdown("---")
-            st.markdown(response.text)
+            st.session_state.report_text = response.text
     else:
         st.error("Please fill in both fields.")
 
-# --- FEEDBACK LOOP ---
-st.markdown("---")
-st.markdown("### 📝 Help Improve AGRIshield (Dynamic Cloud Learning)")
-feedback_col1, feedback_col2 = st.columns(2)
+# --- PERSISTENT REPORT DISPLAY ---
+if st.session_state.report_text:
+    st.markdown("---")
+    st.markdown(st.session_state.report_text)
 
-with feedback_col1:
+    # --- USER FEEDBACK LOOP WIDGET (STAYS VISIBLE WITH REPORT) ---
+    st.markdown("---")
+    st.markdown("### 📝 Help Improve AGRIshield (Dynamic Cloud Learning)")
+    
     is_correct = st.radio("Was this diagnosis accurate?", ["Select...", "Yes", "No"], key="feedback_radio")
 
-if is_correct == "No":
-    corrected_treatment = st.text_input("Enter the verified correct herbal treatment:")
-    if st.button("Submit Correction & Retrain Model"):
-        if corrected_treatment and plant_input and disease_input:
-            with engine.connect() as conn:
-                conn.execute(text('''
-                    INSERT INTO feedback_logs (plant, disease, predicted_treatment, verified_treatment)
-                    VALUES (:plant, :disease, :pred, :verified)
-                '''), {
-                    "plant": plant_input,
-                    "disease": disease_input,
-                    "pred": st.session_state.last_prediction,
-                    "verified": corrected_treatment
-                })
-                conn.commit()
-            
-            with st.spinner("🔄 Logging to Supabase & Retraining Model..."):
-                success = trigger_automatic_retraining()
-                
-            if success:
-                st.success("✅ Log saved to cloud database and model updated!")
+    if is_correct == "No":
+        corrected_treatment = st.text_input("Enter the verified correct herbal treatment:", key="correction_input")
+        if st.button("Submit Correction & Retrain Model"):
+            if corrected_treatment and st.session_state.active_plant and st.session_state.active_disease:
+                try:
+                    with engine.connect() as conn:
+                        conn.execute(text('''
+                            INSERT INTO feedback_logs (plant, disease, predicted_treatment, verified_treatment)
+                            VALUES (:plant, :disease, :pred, :verified)
+                        '''), {
+                            "plant": st.session_state.active_plant,
+                            "disease": st.session_state.active_disease,
+                            "pred": st.session_state.last_prediction,
+                            "verified": corrected_treatment
+                        })
+                        conn.commit()
+                    
+                    with st.spinner("🔄 Logging to Supabase & Retraining Model..."):
+                        success = trigger_automatic_retraining()
+                        
+                    if success:
+                        st.success("✅ Log saved to cloud database and model updated!")
+                    else:
+                        st.error("Feedback logged, but automated retraining encountered an issue.")
+                except Exception as db_err:
+                    st.error(f"Database error during submit: {db_err}")
             else:
-                st.error("Feedback logged, but automated retraining encountered an issue.")
-        else:
-            st.error("Please ensure all fields are filled properly.")
+                st.error("Please fill in the correction field properly.")
 
-elif is_correct == "Yes":
-    if st.button("Confirm Accuracy & Retrain"):
-        if plant_input and disease_input:
-            with engine.connect() as conn:
-                conn.execute(text('''
-                    INSERT INTO feedback_logs (plant, disease, predicted_treatment, verified_treatment)
-                    VALUES (:plant, :disease, :pred, :verified)
-                '''), {
-                    "plant": plant_input,
-                    "disease": disease_input,
-                    "pred": st.session_state.last_prediction,
-                    "verified": st.session_state.last_prediction
-                })
-                conn.commit()
-            
-            with st.spinner("🔄 Confirmation logged to Supabase & Model updated..."):
-                success = trigger_automatic_retraining()
-                
-            if success:
-                st.success("✅ Positive feedback stored permanently in the cloud!")
+    elif is_correct == "Yes":
+        if st.button("Confirm Accuracy & Retrain"):
+            if st.session_state.active_plant and st.session_state.active_disease:
+                try:
+                    with engine.connect() as conn:
+                        conn.execute(text('''
+                            INSERT INTO feedback_logs (plant, disease, predicted_treatment, verified_treatment)
+                            VALUES (:plant, :disease, :pred, :verified)
+                        '''), {
+                            "plant": st.session_state.active_plant,
+                            "disease": st.session_state.active_disease,
+                            "pred": st.session_state.last_prediction,
+                            "verified": st.session_state.last_prediction
+                        })
+                        conn.commit()
+                    
+                    with st.spinner("🔄 Confirmation logged to Supabase & Model updated..."):
+                        success = trigger_automatic_retraining()
+                        
+                    if success:
+                        st.success("✅ Positive feedback stored permanently in the cloud!")
+                    else:
+                        st.error("Log saved, but retraining encountered an issue.")
+                except Exception as db_err:
+                    st.error(f"Database error during confirm: {db_err}")
             else:
-                st.error("Log saved, but retraining encountered an issue.")
-        else:
-            st.error("Please ensure all fields are filled properly.")
+                st.error("Please ensure fields are active.")
