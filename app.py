@@ -148,6 +148,12 @@ if 'feedback_submitted' not in st.session_state:
 st.title("🌿 AGRIshield Diagnostic Report")
 st.write("Get instant, verified chemical-free herbal solutions for crop health.")
 
+# MULTILINGUAL SELECTION DROPDOWN
+selected_language = st.selectbox(
+    "🌐 Select Report Language:", 
+    ["English", "Kannada (ಕನ್ನಡ)", "Hindi (हिंदी)", "Tamil (தமிழ்)", "Telugu (తెలుగు)"]
+)
+
 input_method = st.radio("Input Method:", ["Select from Options", "Type Manually"])
 
 plant_input = ""
@@ -173,11 +179,15 @@ if st.button("Generate Condensed Herbal Report", use_container_width=True):
             
             st.session_state.last_prediction = ml_prediction
             
+            target_lang = selected_language.split(" ")[0]
+            
             prompt = f"""
             Act as an expert agricultural botanist specializing in organic farming. 
             Target Crop: {plant_input}
             Condition/Disease: {disease_input}
             Local Storehouse Suggestion: {ml_prediction}
+            
+            CRITICAL REQUIREMENT: You MUST generate the complete diagnostic report in the {target_lang} language.
             
             Provide a concise, highly scannable, condensed diagnostic report in Markdown using ONLY these bullet points:
             
@@ -189,14 +199,15 @@ if st.button("Generate Condensed Herbal Report", use_container_width=True):
             Keep descriptions punchy, direct, and easy for a farmer to read at a glance. No long paragraphs.
             """
             
-            with st.spinner("🔍 Compiling Verified Herbal Report..."):
+            with st.spinner(f"🔍 Compiling Verified Herbal Report in {target_lang}..."):
                 response = llm_model.generate_content(prompt)
                 st.session_state.report_text = response.text
                 
         except ValueError:
             st.warning("Custom entry detected. Running Deep Analysis...")
             st.session_state.last_prediction = "Custom Cloud Analysis"
-            fallback_prompt = f"Provide a condensed, 100% chemical-free herbal treatment report for '{plant_input}' suffering from '{disease_input}' using short bullet points."
+            target_lang = selected_language.split(" ")[0]
+            fallback_prompt = f"Provide a condensed, 100% chemical-free herbal treatment report for '{plant_input}' suffering from '{disease_input}' strictly in the {target_lang} language using short bullet points."
             response = llm_model.generate_content(fallback_prompt)
             st.session_state.report_text = response.text
     else:
