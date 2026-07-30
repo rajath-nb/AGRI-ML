@@ -53,10 +53,11 @@ engine = create_engine(
 genai.configure(api_key=API_KEY)
 llm_model = genai.GenerativeModel('gemini-2.5-flash')
 
-# --- INITIALIZE DATABASE TABLE ---
+# --- INITIALIZE & UPGRADE DATABASE TABLE ---
 def init_db():
     try:
         with engine.connect() as conn:
+            # Create table if it doesn't exist
             conn.execute(text('''
                 CREATE TABLE IF NOT EXISTS feedback_logs (
                     id SERIAL PRIMARY KEY,
@@ -64,10 +65,19 @@ def init_db():
                     disease TEXT,
                     predicted_treatment TEXT,
                     verified_treatment TEXT,
+                    generated_report TEXT,
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             '''))
             conn.commit()
+            
+            # Safely upgrade existing tables by adding the new column if it's missing
+            try:
+                conn.execute(text("ALTER TABLE feedback_logs ADD COLUMN generated_report TEXT;"))
+                conn.commit()
+            except Exception:
+                pass # Column already exists, safe to ignore
+                
     except Exception as e:
         st.warning(f"Database connection notice: {e}")
 
@@ -131,6 +141,8 @@ if 'active_plant' not in st.session_state:
     st.session_state.active_plant = ""
 if 'active_disease' not in st.session_state:
     st.session_state.active_disease = ""
+if 'feedback_submitted' not in st.session_state:
+    st.session_state.feedback_submitted = False
 
 # --- UI DESIGN ---
 st.title("🌿 AGRIshield Diagnostic Report")
@@ -153,6 +165,7 @@ if st.button("Generate Condensed Herbal Report", use_container_width=True):
     if plant_input and disease_input:
         st.session_state.active_plant = plant_input
         st.session_state.active_disease = disease_input
+        st.session_state.feedback_submitted = False  # Reset feedback flag for new report
         try:
             plant_num = le_plant.transform([plant_input])[0]
             disease_num = le_disease.transform([disease_input])[0]
@@ -189,70 +202,71 @@ if st.button("Generate Condensed Herbal Report", use_container_width=True):
     else:
         st.error("Please fill in both fields.")
 
-# --- PERSISTENT REPORT DISPLAY ---
+# --- PERSISTENT REPORT DISPLAY & AUTOMATIC FEEDBACK ---
 if st.session_state.report_text:
     st.markdown("---")
     st.markdown(st.session_state.report_text)
-
-    # --- USER FEEDBACK LOOP WIDGET (STAYS VISIBLE WITH REPORT) ---
     st.markdown("---")
-    st.markdown("### 📝 Help Improve AGRIshield (Dynamic Cloud Learning)")
-    
-    is_correct = st.radio("Was this diagnosis accurate?", ["Select...", "Yes", "No"], key="feedback_radio")
 
-    if is_correct == "No":
-        corrected_treatment = st.text_input("Enter the verified correct herbal treatment:", key="correction_input")
-        if st.button("Submit Correction & Retrain Model"):
-            if corrected_treatment and st.session_state.active_plant and st.session_state.active_disease:
-                try:
-                    with engine.connect() as conn:
-                        conn.execute(text('''
-                            INSERT INTO feedback_logs (plant, disease, predicted_treatment, verified_treatment)
-                            VALUES (:plant, :disease, :pred, :verified)
-                        '''), {
-                            "plant": st.session_state.active_plant,
-                            "disease": st.session_state.active_disease,
-                            "pred": st.session_state.last_prediction,
-                            "verified": corrected_treatment
-                        })
-                        conn.commit()
-                    
-                    with st.spinner("🔄 Logging to Supabase & Retraining Model..."):
-                        success = trigger_automatic_retraining()
-                        
-                    if success:
-                        st.success("✅ Log saved to cloud database and model updated!")
-                    else:
-                        st.error("Feedback logged, but automated retraining encountered an issue.")
-                except Exception as db_err:
-                    st.error(f"Database error during submit: {db_err}")
-            else:
-                st.error("Please fill in the correction field properly.")
+    if not st.session_state.feedback_submitted:
+        st.markdown("### 📝 Help Improve AGRIshield (Dynamic Cloud Learning)")
+        is_correct = st.radio("Was this diagnosis accurate?", ["Select...", "Yes", "No"], key="feedback_radio")
 
-    elif is_correct == "Yes":
-        if st.button("Confirm Accuracy & Retrain"):
+        # Automatically log "Yes" feedback + generated report
+        if is_correct == "Yes":
             if st.session_state.active_plant and st.session_state.active_disease:
-                try:
-                    with engine.connect() as conn:
-                        conn.execute(text('''
-                            INSERT INTO feedback_logs (plant, disease, predicted_treatment, verified_treatment)
-                            VALUES (:plant, :disease, :pred, :verified)
-                        '''), {
-                            "plant": st.session_state.active_plant,
-                            "disease": st.session_state.active_disease,
-                            "pred": st.session_state.last_prediction,
-                            "verified": st.session_state.last_prediction
-                        })
-                        conn.commit()
-                    
-                    with st.spinner("🔄 Confirmation logged to Supabase & Model updated..."):
-                        success = trigger_automatic_retraining()
+                with st.spinner("🔄 Automatically logging confirmation & retraining model..."):
+                    try:
+                        with engine.connect() as conn:
+                            conn.execute(text('''
+                                INSERT INTO feedback_logs (plant, disease, predicted_treatment, verified_treatment, generated_report)
+                                VALUES (:plant, :disease, :pred, :verified, :report)
+                            '''), {
+                                "plant": st.session_state.active_plant,
+                                "disease": st.session_state.active_disease,
+                                "pred": st.session_state.last_prediction,
+                                "verified": st.session_state.last_prediction,
+                                "report": st.session_state.report_text
+                            })
+                            conn.commit()
                         
-                    if success:
-                        st.success("✅ Positive feedback stored permanently in the cloud!")
-                    else:
-                        st.error("Log saved, but retraining encountered an issue.")
-                except Exception as db_err:
-                    st.error(f"Database error during confirm: {db_err}")
-            else:
-                st.error("Please ensure fields are active.")
+                        success = trigger_automatic_retraining()
+                        if success:
+                            st.session_state.feedback_submitted = True
+                            st.rerun() 
+                        else:
+                            st.error("Log saved, but retraining encountered an issue.")
+                    except Exception as db_err:
+                        st.error(f"Database error during confirm: {db_err}")
+
+        # Automatically log "No" feedback + generated report upon text submission (hitting Enter)
+        elif is_correct == "No":
+            corrected_treatment = st.text_input("Enter the verified correct herbal treatment (Press Enter to auto-submit):", key="correction_input")
+            if corrected_treatment and st.session_state.active_plant and st.session_state.active_disease:
+                with st.spinner("🔄 Automatically logging correction & retraining model..."):
+                    try:
+                        with engine.connect() as conn:
+                            conn.execute(text('''
+                                INSERT INTO feedback_logs (plant, disease, predicted_treatment, verified_treatment, generated_report)
+                                VALUES (:plant, :disease, :pred, :verified, :report)
+                            '''), {
+                                "plant": st.session_state.active_plant,
+                                "disease": st.session_state.active_disease,
+                                "pred": st.session_state.last_prediction,
+                                "verified": corrected_treatment,
+                                "report": st.session_state.report_text
+                            })
+                            conn.commit()
+                        
+                        success = trigger_automatic_retraining()
+                        if success:
+                            st.session_state.feedback_submitted = True
+                            st.rerun() 
+                        else:
+                            st.error("Feedback logged, but automated retraining encountered an issue.")
+                    except Exception as db_err:
+                        st.error(f"Database error during submit: {db_err}")
+
+    # Display clean success message after automatic logic finishes
+    else:
+        st.success("✅ Thank you! Your feedback and the generated report have been stored permanently in the cloud.")
