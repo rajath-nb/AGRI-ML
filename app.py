@@ -8,7 +8,7 @@ import google.generativeai as genai
 from sqlalchemy import create_engine, text
 
 # --- CONFIGURATION & PAGE SETUP ---
-st.set_page_config(page_title="AGRIshield Diagnostic Center", page_icon="🌿", layout="wide")
+st.set_page_config(page_title="AGRIshield ML", page_icon="🌿", layout="wide")
 
 st.markdown("""
     <style>
@@ -202,7 +202,7 @@ def format_translated_label(option_key):
 # =========================================================
 # MAIN HEADER
 # =========================================================
-st.markdown("<h1 style='text-align: center;'>🛡️ AGRIshield Diagnostic Center</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>🛡️ AGRIshield ML Based Web Application</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; font-size: 1.1rem; color: #555;'>Instantly scan and detect crop diseases to receive verified organic treatments.</p>", unsafe_allow_html=True)
 st.markdown("---")
 
