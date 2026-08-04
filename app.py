@@ -8,7 +8,7 @@ import google.generativeai as genai
 from sqlalchemy import create_engine, text
 
 # --- CONFIGURATION & PAGE SETUP ---
-st.set_page_config(page_title="AGRIshield ML", page_icon="🌿", layout="wide")
+st.set_page_config(page_title="AGRIshield Diagnostic Center", page_icon="🌿", layout="wide")
 
 st.markdown("""
     <style>
@@ -191,9 +191,8 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🌿 About AGRIshield\nAn AI-powered agricultural diagnostic tool providing verified, 100% chemical-free herbal solutions and plant deformity reports.")
     st.markdown("---")
-    
+    st.caption("🚀 Powered by Gemini Vision, Agentic Reflection & Supabase")
 
-# Function to dynamically format option labels in selected language
 def format_translated_label(option_key):
     if report_language in OPTION_TRANSLATIONS and option_key in OPTION_TRANSLATIONS[report_language]:
         return OPTION_TRANSLATIONS[report_language][option_key]
@@ -202,7 +201,7 @@ def format_translated_label(option_key):
 # =========================================================
 # MAIN HEADER
 # =========================================================
-st.markdown("<h1 style='text-align: center;'>🛡️ AGRIshield ML Based Web Application</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>🛡️ AGRIshield Diagnostic Center</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; font-size: 1.1rem; color: #555;'>Instantly scan and detect crop diseases to receive verified organic treatments.</p>", unsafe_allow_html=True)
 st.markdown("---")
 
@@ -239,23 +238,50 @@ with tab_vision:
                 st.session_state.feedback_submitted = False
                 st.session_state.active_mode = "Image"
                 
-                with st.spinner(f"Scanning visuals and translating to {report_language}..."):
-                    prompt = f"""
-                    Act as an expert plant pathologist and organic botanist. Carefully analyze the uploaded crop/plant sample.
-                    IMPORTANT: Generate the ENTIRE diagnostic report strictly in the language: {report_language}.
-                    
-                    Provide a condensed, scannable report using Markdown with these exact bullet points:
-                    * **Identified Crop:** <Species Name>
-                    * **Detected Deformity / Disease:** <Condition Name>
-                    * **Diagnosis Summary:** 1 sentence explaining the symptoms.
-                    * **Herbal Prescription (100% Organic):** 2 precise bullet points detailing exact organic remedies.
-                    * **Prevention Rule:** 1 quick soil or farming tip.
+                # --- PASS 1: Draft Generation ---
+                with st.spinner(f"Pass 1/2: AI Diagnostician scanning visual architecture..."):
+                    draft_prompt = """
+                    Act as a plant pathologist. Analyze this crop image and draft a raw diagnostic report.
+                    Include the species, disease/deformity, symptoms, severity, and potential organic remedies.
                     """
                     try:
-                        response = llm_model.generate_content([prompt, st.session_state.active_image])
-                        st.session_state.report_text = response.text
+                        draft_response = llm_model.generate_content([draft_prompt, st.session_state.active_image])
+                        raw_draft = draft_response.text
                     except Exception as e:
-                        st.error(f"Image analysis error: {e}")
+                        st.error(f"Image analysis error during drafting: {e}")
+                        raw_draft = ""
+                
+                if raw_draft:
+                    # --- PASS 2: Agentic Auditor & Expanded Schema ---
+                    st.toast("🧪 Pass 2/2: Auditing draft against organic medicinal research...")
+                    with st.spinner(f"Pass 2/2: Cross-checking remedies and translating to {report_language}..."):
+                        verification_prompt = f"""
+                        You are a strict Agricultural Auditor and Organic Medicinal Researcher. 
+                        Review the following raw diagnostic draft based on the uploaded image:
+                        
+                        <DRAFT>
+                        {raw_draft}
+                        </DRAFT>
+                        
+                        Your Task:
+                        1. FACT-CHECK the remedies. Eliminate any hallucinated, unsafe, or chemical-based advice.
+                        2. Ensure treatments align with verified agricultural science and standard organic advancements.
+                        3. Output the final, expanded diagnostic report STRICTLY in the {report_language} language.
+                        
+                        Format using ONLY these bullet points:
+                        * **Identified Crop:** <Species Name>
+                        * **Detected Deformity / Disease:** <Condition Name>
+                        * **Severity & Urgency Level:** <Low / Moderate / Severe>
+                        * **Diagnosis Summary:** 1 sentence explaining the primary symptoms or trigger.
+                        * **Verified Herbal Prescription (100% Organic):** 2 precise, fact-checked bullet points detailing exact organic remedies (e.g., neem oil ratio, buttermilk wash, garlic-chilli extract) and application technique.
+                        * **Application Timing & Frequency:** 1 bullet point specifying best time of day (e.g., early morning/dusk) and frequency (e.g., every 5-7 days).
+                        * **Prevention Rule:** 1 scientifically-backed soil or farming tip to prevent recurrence.
+                        """
+                        try:
+                            final_response = llm_model.generate_content(verification_prompt)
+                            st.session_state.report_text = final_response.text
+                        except Exception as e:
+                            st.error(f"Error during verification pass: {e}")
         else:
             st.info("👈 Upload or capture a photo to begin the AI scan.")
 
@@ -295,21 +321,45 @@ with tab_text:
             st.session_state.active_plant = plant_input
             st.session_state.active_disease = disease_input
             
-            with st.spinner(f"Compiling Herbal Report in {report_language}..."):
-                prompt = f"""
-                Act as an expert organic agricultural botanist.
-                Target Crop: {plant_input}
-                Condition/Disease: {disease_input}
-                
-                IMPORTANT: Generate the ENTIRE diagnostic report strictly in the language: {report_language}.
-                
-                Provide a condensed report using Markdown:
-                * **Diagnosis Summary:** 1 sentence.
-                * **Herbal Prescription (100% Organic):** 2 concise bullet points.
-                * **Prevention Rule:** 1 quick tip.
-                """
-                response = llm_model.generate_content(prompt)
-                st.session_state.report_text = response.text
+            # --- PASS 1: Draft Generation ---
+            with st.spinner(f"Pass 1/2: Compiling initial organic treatment plan..."):
+                draft_prompt = f"Draft a raw organic treatment plan for {plant_input} suffering from {disease_input}. List symptoms, organic remedies, and prevention tips."
+                try:
+                    draft_response = llm_model.generate_content(draft_prompt)
+                    raw_draft = draft_response.text
+                except Exception as e:
+                    st.error(f"Drafting error: {e}")
+                    raw_draft = ""
+            
+            if raw_draft:
+                # --- PASS 2: Agentic Auditor & Expanded Schema ---
+                st.toast("🧪 Pass 2/2: Cross-checking remedies with agricultural science...")
+                with st.spinner(f"Pass 2/2: Verifying facts and translating to {report_language}..."):
+                    verification_prompt = f"""
+                    You are a strict Agricultural Auditor. Review this draft treatment plan for {plant_input} with {disease_input}:
+                    
+                    <DRAFT>
+                    {raw_draft}
+                    </DRAFT>
+                    
+                    Your Task:
+                    1. FACT-CHECK the remedies. Eliminate any unsafe or scientifically unverified advice.
+                    2. Only approve treatments that align with established organic medicinal research.
+                    3. Output the final, expanded diagnostic report STRICTLY in the {report_language} language.
+                    
+                    Format using ONLY these bullet points:
+                    * **Target Crop & Condition:** {plant_input} — {disease_input}
+                    * **Severity & Urgency Level:** <Low / Moderate / Severe>
+                    * **Diagnosis Summary:** 1 sentence explaining the primary symptoms.
+                    * **Verified Herbal Prescription (100% Organic):** 2 concise, fact-checked bullet points detailing exact organic preparation methods.
+                    * **Application Timing & Frequency:** 1 bullet point specifying best time of day (e.g., early morning/dusk) and frequency.
+                    * **Prevention Rule:** 1 scientifically-backed tip to prevent future occurrences.
+                    """
+                    try:
+                        final_response = llm_model.generate_content(verification_prompt)
+                        st.session_state.report_text = final_response.text
+                    except Exception as e:
+                        st.error(f"Error during verification pass: {e}")
         else:
             st.warning("Please specify both the Plant and the Disease to proceed.")
 
