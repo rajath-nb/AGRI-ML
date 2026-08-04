@@ -191,7 +191,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🌿 About AGRIshield\nAn AI-powered agricultural diagnostic tool providing verified, 100% chemical-free herbal solutions and plant deformity reports.")
     st.markdown("---")
-    st.caption("🚀 Powered by Gemini Vision & Supabase")
+    
 
 # Function to dynamically format option labels in selected language
 def format_translated_label(option_key):
