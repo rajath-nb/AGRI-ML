@@ -8,7 +8,7 @@ import google.generativeai as genai
 from sqlalchemy import create_engine, text
 
 # --- CONFIGURATION & PAGE SETUP ---
-st.set_page_config(page_title="AGRIshield Diagnostic Center", page_icon="🌿", layout="wide")
+st.set_page_config(page_title="AGRIshield Web", page_icon="🌿", layout="wide")
 
 st.markdown("""
     <style>
@@ -191,7 +191,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🌿 About AGRIshield\nAn AI-powered agricultural diagnostic tool providing verified, 100% chemical-free herbal solutions and plant deformity reports.")
     st.markdown("---")
-    st.caption("🚀 Powered by Gemini Vision, Agentic Reflection & Supabase")
+    
 
 def format_translated_label(option_key):
     if report_language in OPTION_TRANSLATIONS and option_key in OPTION_TRANSLATIONS[report_language]:
@@ -201,7 +201,7 @@ def format_translated_label(option_key):
 # =========================================================
 # MAIN HEADER
 # =========================================================
-st.markdown("<h1 style='text-align: center;'>🛡️ AGRIshield Diagnostic Center</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>🛡️ AGRIshield ML Based Application</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; font-size: 1.1rem; color: #555;'>Instantly scan and detect crop diseases to receive verified organic treatments.</p>", unsafe_allow_html=True)
 st.markdown("---")
 
