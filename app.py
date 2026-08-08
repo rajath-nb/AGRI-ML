@@ -219,7 +219,7 @@ with tab_vision:
         image_source = st.radio("Choose Input Method:", ["📁 Upload File", "📸 Take Photo"], horizontal=True)
         active_file = None
         if image_source == "📁 Upload File":
-            active_file = st.file_uploader("Upload Crop Photo (Leaf, Stem, Fruit, or Whole Plant):", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+            active_file = st.file_uploader("Upload Crop Photo (Leaf, Stem, Fruit, or Whole Plant):", type=["jpg", "jpeg", "png", "webp"], label_visibility="collapsed")
         else:
             active_file = st.camera_input("Take a photo:")
 
