@@ -426,4 +426,4 @@ if st.session_state.report_text:
                         else:
                             st.warning("Please type a correction before submitting.")
         else:
-            st.success("✅ Thank you! Your feedback has been securely logged to Supabase to train future models.")
+            st.success("Thank you for your feedback ✅")
